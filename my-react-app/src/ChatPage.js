@@ -12,24 +12,42 @@ function ChatPage({ username, onLogout }) {
         // 파일 업로드 로직 구현
       };
   useEffect(() => {
-    const sock = new SockJS('http://localhost:8090/chat-socket');
-    const stompClient = Stomp.over(sock);
-    
-    stompClient.connect({}, () => {
-      stompClient.subscribe('/topic/messages', (message) => {
-        const receivedMsg = JSON.parse(message.body);
-        setMessages(messages => [...messages, receivedMsg]);
-      });
-    });
-  
-    setSocket(stompClient);
-  
-    return () => {
-      if (stompClient) {
-        stompClient.disconnect();
+  // 서버로부터 초기 메시지 로드
+  const loadMessages = async () => {
+    try {
+      const response = await fetch('http://localhost:8090/api/messages');
+      const data = await response.json();
+      if (Array.isArray(data)) { // 서버 응답이 배열인지 확인
+        setMessages(data);
+      } else {
+        console.error('서버 응답이 배열 형식이 아닙니다:', data);
       }
-    };
-  }, []);
+    } catch (error) {
+      console.error('메시지 로딩 중 오류 발생:', error);
+    }
+  };
+
+  loadMessages();
+
+  // 웹소켓 연결 및 메시지 수신 구독
+  const sock = new SockJS('http://localhost:8090/chat-socket');
+  const stompClient = Stomp.over(sock);
+  
+  stompClient.connect({}, () => {
+    stompClient.subscribe('/topic/messages', (message) => {
+      const receivedMsg = JSON.parse(message.body);
+      setMessages(messages => [...messages, receivedMsg]);
+    });
+  });
+
+  setSocket(stompClient);
+
+  return () => {
+    if (stompClient) {
+      stompClient.disconnect();
+    }
+  };
+}, []);
   
   const sendMessage = () => {
     if (socket && newMessage.trim()) {
@@ -39,11 +57,7 @@ function ChatPage({ username, onLogout }) {
         timestamp: new Date()
       };
   
-      socket.send("/app/chat/send", {}, JSON.stringify(message)); // 서버로 메시지 전송
-  
-      // 새 메시지를 messages 상태에 추가
-      setMessages(messages => [...messages, message]);
-  
+      socket.send("/app/chat/send", {}, JSON.stringify(message)); // 서버로 메시지 전송  
       setNewMessage(''); // 입력 필드 초기화
     }
   };
